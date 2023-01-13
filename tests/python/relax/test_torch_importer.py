@@ -562,6 +562,92 @@ def test_silu():
     verify_model(SiLU(), input_info, {}, expected1)
 
 
+def test_groupnorm():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+
+    class GroupNorm(Module):
+        def __init__(self):
+            super().__init__()
+            self.gn = torch.nn.GroupNorm(3, 3)
+
+        def forward(self, input):
+            return self.gn(input)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            input_1: R.Tensor((1, 3, 10, 10), dtype="float32"),
+            w1: R.Tensor((3,), dtype="float32"),
+            w2: R.Tensor((3,), dtype="float32"),
+        ) -> R.Tensor((1, 3, 10, 10), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 3, 1, 10, 10), dtype="float32") = R.reshape(
+                    input_1, (1, 3, 1, 10, 10)
+                )
+                lv1: R.Tensor((1, 3, 1, 1, 1), dtype="float32") = R.mean(
+                    lv, axis=[2, 3, 4], keepdims=True
+                )
+                lv2: R.Tensor((1, 3, 1, 10, 10), dtype="float32") = R.subtract(lv, lv1)
+                lv3: R.Tensor((1, 3, 1, 10, 10), dtype="float32") = R.multiply(lv2, lv2)
+                lv4: R.Tensor((1, 3, 1, 1, 1), dtype="float32") = R.sum(
+                    lv3, axis=[2, 3, 4], keepdims=True
+                )
+                lv5: R.Tensor((1, 3, 1, 1, 1), dtype="float32") = R.divide(lv4, R.const(100.0))
+                lv6: R.Tensor((1, 3, 1, 1, 1), dtype="float32") = R.add(lv5, R.const(1e-05))
+                lv7: R.Tensor((1, 3, 1, 1, 1), dtype="float32") = R.sqrt(lv6)
+                lv8: R.Tensor((1, 3, 1, 10, 10), dtype="float32") = R.divide(lv2, lv7)
+                lv9: R.Tensor((1, 3, 1, 1, 1), dtype="float32") = R.reshape(w1, (1, 3, 1, 1, 1))
+                lv10: R.Tensor((1, 3, 1, 1, 1), dtype="float32") = R.reshape(w2, (1, 3, 1, 1, 1))
+                lv11: R.Tensor((1, 3, 1, 10, 10), dtype="float32") = R.multiply(lv8, lv9)
+                lv12: R.Tensor((1, 3, 1, 10, 10), dtype="float32") = R.add(lv11, lv10)
+                lv13: R.Tensor((1, 3, 10, 10), dtype="float32") = R.reshape(lv12, (1, 3, 10, 10))
+                gv: R.Tensor((1, 3, 10, 10), dtype="float32") = lv13
+                R.output(gv)
+            return gv
+
+    model = GroupNorm()
+    binding = {
+        "w1": model.gn.weight.numpy(),
+        "w2": model.gn.bias.numpy(),
+    }
+    verify_model(model, input_info, binding, expected1)
+
+
+def test_softmax():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+
+    class Softmax(Module):
+        def __init__(self):
+            super().__init__()
+            self.sm = torch.nn.Softmax(dim=1)
+
+        def forward(self, input):
+            return self.sm(input)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            input_1: R.Tensor((1, 3, 10, 10), dtype="float32")
+        ) -> R.Tensor((1, 3, 10, 10), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 3, 10, 10), dtype="float32") = R.nn.softmax(input_1, axis=1)
+                gv: R.Tensor((1, 3, 10, 10), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Softmax(), input_info, {}, expected1)
+
+
 if __name__ == "__main__":
     # tvm.testing.main()
     test_conv()
@@ -575,3 +661,5 @@ if __name__ == "__main__":
     test_dropout()
     test_layernorm()
     test_silu()
+    test_groupnorm()
+    test_softmax()

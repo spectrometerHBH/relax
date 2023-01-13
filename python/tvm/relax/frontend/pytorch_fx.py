@@ -527,7 +527,7 @@ class TorchFXTranslator:
         eps = module.eps
         affine = module.affine
 
-        shape = x.shape_
+        shape = x.struct_info.shape
         assert len(shape) == 4
         N, C, H, W = shape[0], shape[1], shape[2], shape[3]
         assert C == num_channels
@@ -549,7 +549,7 @@ class TorchFXTranslator:
                 relax.op.reshape(weight, (1, num_groups, C // num_groups, 1, 1))
             )
             bias_reshape = self.bb.emit(
-                relax.op.reshape(bias), (1, num_groups, C // num_groups, 1, 1)
+                relax.op.reshape(bias, (1, num_groups, C // num_groups, 1, 1))
             )
             norm_x = self.bb.emit(relax.op.multiply(norm_x, weight_reshape))
             norm_x = self.bb.emit(relax.op.add(norm_x, bias_reshape))
