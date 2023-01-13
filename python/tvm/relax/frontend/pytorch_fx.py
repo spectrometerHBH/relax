@@ -277,11 +277,11 @@ class TorchFXTranslator:
     def _size(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
         if len(node.args) == 1:
-            assert isinstance(x.shape, relax.ShapeExpr)
-            return tuple(s.value for s in x.shape.values)
+            assert isinstance(x.struct_info.shape, relax.ShapeExpr)
+            return tuple(relax.const(s.value) for s in x.struct_info.shape.values)
         assert len(node.args) == 2
         idx = node.args[1]
-        return x.shape[idx].value
+        return x.struct_info.shape[idx].value
 
     def _type(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
@@ -289,7 +289,7 @@ class TorchFXTranslator:
 
     def _getattr(self, node: fx.node.Node) -> relax.Var:
         if isinstance(self.env[node.args[0]], relax.Var) and node.args[1] == "dtype":
-            return self.env[node.args[0]].checked_type.dtype
+            return self.env[node.args[0]].struct_info.dtype
         return getattr(self.env[node.args[0]], node.args[1])
 
     def _getitem(self, node: fx.node.Node) -> relax.Var:
@@ -297,9 +297,10 @@ class TorchFXTranslator:
         if isinstance(x, (list, tuple, relax.ShapeExpr, relax.Tuple)):
             return x[node.args[1]]
         elif isinstance(x, relax.Var):
-            if isinstance(x.shape, relax.Tuple):
+            if isinstance(x.struct_info, relax.TupleStructInfo):
                 return self.bb.emit(relax.TupleGetItem(x, node.args[1]))
 
+            assert isinstance(x.struct_info, relax.TensorStructInfo)
             begin = []
             end = []
             stride = []
@@ -315,7 +316,7 @@ class TorchFXTranslator:
                     i = i + 1
                 elif isinstance(index, slice):
                     begin.append(0 if index.start is None else index.start)
-                    end.append(x.shape_[i] if index.stop is None else index.stop)
+                    end.append(x.struct_info.shape[i] if index.stop is None else index.stop)
                     stride.append(1 if index.step is None else index.step)
                     axes.append(i)
                     i = i + 1
@@ -324,13 +325,14 @@ class TorchFXTranslator:
                     i = i + 1
                 else:
                     raise ValueError("Unsupported index type: " + str(type(index)))
-            while i < len(x.shape_):
+            while i < len(x.struct_info.shape):
                 begin.append(0)
-                end.append(x.shape_[i])
+                end.append(x.struct_info.shape[i])
                 axes.append(i)
                 i = i + 1
-            sliced = self.bb.emit(relax.op.strided_slice(x, begin, end, stride, axes))
-            sliced_shape = list(sliced.shape_)
+            sliced = self.bb.emit(relax.op.strided_slice(x, axes, begin, end, stride))
+            print(sliced.struct_info.shape)
+            sliced_shape = list(sliced.struct_info.shape)
             for i in expand_dim:
                 sliced_shape.insert(i, 1)
             return self.bb.emit(relax.op.reshape(sliced, sliced_shape))

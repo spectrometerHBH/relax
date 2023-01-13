@@ -313,7 +313,6 @@ class SEqualHandlerDefault::Impl {
       *first_mismatch_ = current_paths;
     }
     if (assert_mode_ && !result) {
-      LOG(FATAL) << Downcast<runtime::NDArray>(lhs)->data;
       LOG(FATAL) << "ValueError: StructuralEqual check failed, caused by lhs:" << std::endl
                  << PrettyPrint(lhs) << std::endl
                  << "and rhs:" << std::endl
