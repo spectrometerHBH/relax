@@ -17,13 +17,12 @@
 
 # pylint: disable=invalid-name, inconsistent-return-statements, unidiomatic-typecheck
 """PyTorch FX frontend of Relax."""
+from typing import Dict
 
 from tvm import relax
 import torch
 from torch import nn, fx
 import numpy as np
-
-from typing import Dict
 
 
 class TorchFXTranslator:
