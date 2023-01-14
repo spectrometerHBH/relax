@@ -23,16 +23,18 @@ import torch
 from torch import nn, fx
 import numpy as np
 
+from typing import Dict
+
 
 class TorchFXTranslator:
     """A translator from PyTorch FX to Relax."""
 
     def __init__(self) -> None:
-        self.env = {}
-        self.params = {}
-        self.params_transpose = {}
-        self.named_modules = None
-        self.block_builder = None
+        self.env: Dict[fx.node.Node, relax.Expr] = {}
+        self.params: Dict[torch.Tensor, relax.Constant] = {}
+        self.params_transpose: Dict[torch.Tensor, relax.Constant] = {}
+        self.named_modules: Dict[str, torch.Module] = None
+        self.block_builder: relax.BlockBuilder = None
         self.create_convert_map()
 
     @staticmethod
@@ -181,7 +183,7 @@ class TorchFXTranslator:
 
     def _relu(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
-        return self.block_builder.emit(relax.nn.relu(x))
+        return self.block_builder.emit(relax.op.nn.relu(x))
 
     def _max_pool2d(self, node: fx.node.Node) -> relax.Var:
         x = self.env[node.args[0]]
@@ -280,7 +282,7 @@ class TorchFXTranslator:
             return self._call_binary_op(relax.op.subtract, lhs, rhs)
         return lhs - rhs
 
-    def _size(self, node: fx.node.Node) -> relax.Var:
+    def _size(self, node: fx.node.Node) -> relax.Expr:
         x = self.env[node.args[0]]
         if len(node.args) == 1:
             assert isinstance(x.struct_info.shape, relax.ShapeExpr)
@@ -579,7 +581,7 @@ class TorchFXTranslator:
             gamma = relax.const(torch.ones_like(module.normalized_shape), x.checked_type)
             beta = relax.const(torch.zeros_like(module.normalized_shape), x.checked_type)
         dim_num = len(module.normalized_shape)
-        axes = tuple(range(-dim_num, 0))
+        axes = list(range(-dim_num, 0))
 
         return self.block_builder.emit(
             relax.op.nn.layer_norm(
