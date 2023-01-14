@@ -121,6 +121,7 @@ def test_linear():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
 
+    # nn.Linear
     class Dense1(Module):
         def __init__(self):
             super().__init__()
@@ -180,6 +181,37 @@ def test_linear():
     model = Dense2()
     binding = {"w1": model.linear.weight.numpy().T}
     verify_model(model, input_info, binding, expected2)
+
+    # matmul
+    class MatMul1(Module):
+        def __init__(self):
+            super().__init__()
+
+        def forward(self, x, y):
+            return torch.matmul(x, y)
+
+    @tvm.script.ir_module
+    class expected3:
+        @R.function
+        def main(
+            input_1: R.Tensor((10, 10), dtype="float32"),
+            input_2: R.Tensor((10, 10), dtype="float32"),
+        ) -> R.Tensor((10, 10), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((10, 10), dtype="float32") = R.matmul(
+                    input_1, input_2, out_dtype="float32"
+                )
+                gv: R.Tensor((10, 10), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(
+        MatMul1(),
+        {"x": ([10, 10], "float32"), "y": ([10, 10], "float32")},
+        {},
+        expected3,
+    )
 
 
 def test_relu():
@@ -1038,23 +1070,365 @@ def test_unary():
     verify_model(Sqrt(), input_info, {}, expected3)
 
 
+def test_gelu():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+
+    class Gelu(Module):
+        def forward(self, input):
+            return torch.nn.functional.gelu(input)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            input_1: R.Tensor((1, 3, 10, 10), dtype="float32")
+        ) -> R.Tensor((1, 3, 10, 10), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 3, 10, 10), dtype="float32") = R.nn.gelu(input_1)
+                gv: R.Tensor((1, 3, 10, 10), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Gelu(), input_info, {}, expected1)
+
+
+def test_interpolate():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+
+    class Interpolate(Module):
+        def forward(self, input):
+            return torch.nn.functional.interpolate(input, size=(5, 5))
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            input_1: R.Tensor((1, 3, 10, 10), dtype="float32")
+        ) -> R.Tensor((1, 3, 5, 5), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 3, 5, 5), dtype="float32") = R.image.resize2d(
+                    input_1,
+                    size=[5, 5],
+                    roi=[0.000000, 0.000000, 0.000000, 0.000000],
+                    layout="NCHW",
+                    method="nearest_neighbor",
+                    coordinate_transformation_mode="asymmetric",
+                    rounding_method="round",
+                    cubic_alpha=-0.5,
+                    cubic_exclude=0,
+                    extrapolation_value=0,
+                    out_dtype="",
+                )
+                gv: R.Tensor((1, 3, 5, 5), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Interpolate(), input_info, {}, expected1)
+
+
+def test_addmm():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {
+        "x1": ([10, 10], "float32"),
+        "x2": ([10, 10], "float32"),
+        "x3": ([10, 10], "float32"),
+    }
+
+    class Addmm(Module):
+        def forward(self, x1, x2, x3):
+            return torch.addmm(x1, x2, x3)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            x1: R.Tensor((10, 10), dtype="float32"),
+            x2: R.Tensor((10, 10), dtype="float32"),
+            x3: R.Tensor((10, 10), dtype="float32"),
+        ) -> R.Tensor((10, 10), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((10, 10), dtype="float32") = R.matmul(x2, x3, out_dtype="float32")
+                lv1: R.Tensor((10, 10), dtype="float32") = R.add(x1, lv)
+                gv: R.Tensor((10, 10), dtype="float32") = lv1
+                R.output(gv)
+            return gv
+
+    verify_model(Addmm(), input_info, {}, expected1)
+
+
+def test_split():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+
+    class Split(Module):
+        def forward(self, input):
+            return torch.split(input, 1, dim=1)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            input_1: R.Tensor((1, 3, 10, 10), dtype="float32")
+        ) -> R.Tuple(
+            R.Tensor((1, 1, 10, 10), dtype="float32"),
+            R.Tensor((1, 1, 10, 10), dtype="float32"),
+            R.Tensor((1, 1, 10, 10), dtype="float32"),
+        ):
+            # block 0
+            with R.dataflow():
+                lv: R.Tuple(
+                    R.Tensor((1, 1, 10, 10), dtype="float32"),
+                    R.Tensor((1, 1, 10, 10), dtype="float32"),
+                    R.Tensor((1, 1, 10, 10), dtype="float32"),
+                ) = R.split(input_1, indices_or_sections=3, axis=1)
+                gv: R.Tuple(
+                    R.Tensor((1, 1, 10, 10), dtype="float32"),
+                    R.Tensor((1, 1, 10, 10), dtype="float32"),
+                    R.Tensor((1, 1, 10, 10), dtype="float32"),
+                ) = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Split(), input_info, {}, expected1)
+
+
+def test_tril():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"input_1": ([10, 10], "float32")}
+
+    class Tril(Module):
+        def forward(self, input):
+            return torch.tril(input, 1)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            input_1: R.Tensor((10, 10), dtype="float32")
+        ) -> R.Tensor((10, 10), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((10, 10), dtype="float32") = R.tril(input_1, 1)
+                gv: R.Tensor((10, 10), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Tril(), input_info, {}, expected1)
+
+
+def test_new_ones():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"x": ([1, 2, 3], "float32")}
+
+    class NewOnes(Module):
+        def forward(self, x):
+            return x.new_ones(1, 2, 3)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(x: R.Tensor((1, 2, 3), dtype="float32")) -> R.Tensor((1, 2, 3), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 2, 3), dtype="float32") = R.full(
+                    (1, 2, 3), R.const(1, "float32"), dtype="float32"
+                )
+                gv: R.Tensor((1, 2, 3), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(NewOnes(), input_info, {}, expected1)
+
+
+def test_expand():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"x": ([1, 2, 3, 4], "float32")}
+
+    class Expand(Module):
+        def forward(self, x):
+            return x.expand(4, 2, 3, 4)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            x: R.Tensor((1, 2, 3, 4), dtype="float32")
+        ) -> R.Tensor((4, 2, 3, 4), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((4, 2, 3, 4), dtype="float32") = R.broadcast_to(x, (4, 2, 3, 4))
+                gv: R.Tensor((4, 2, 3, 4), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Expand(), input_info, {}, expected1)
+
+
+def test_to():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"x": ([1, 2, 3, 4], "float32")}
+
+    # float
+    class ToFloat(Module):
+        def forward(self, x):
+            return x.float()
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            x: R.Tensor((1, 2, 3, 4), dtype="float32")
+        ) -> R.Tensor((1, 2, 3, 4), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 2, 3, 4), dtype="float32") = R.astype(x, dtype="float32")
+                gv: R.Tensor((1, 2, 3, 4), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(ToFloat(), input_info, {}, expected1)
+
+    # half
+    class ToHalf(Module):
+        def forward(self, x):
+            return x.half()
+
+    @tvm.script.ir_module
+    class expected2:
+        @R.function
+        def main(
+            x: R.Tensor((1, 2, 3, 4), dtype="float32")
+        ) -> R.Tensor((1, 2, 3, 4), dtype="float16"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 2, 3, 4), dtype="float16") = R.astype(x, dtype="float16")
+                gv: R.Tensor((1, 2, 3, 4), dtype="float16") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(ToHalf(), input_info, {}, expected2)
+
+
+def test_permute():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"x": ([1, 2, 3, 4], "float32")}
+
+    class Permute(Module):
+        def forward(self, x):
+            return x.permute(0, 3, 2, 1)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            x: R.Tensor((1, 2, 3, 4), dtype="float32")
+        ) -> R.Tensor((1, 4, 3, 2), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 4, 3, 2), dtype="float32") = R.permute_dims(x, axes=[0, 3, 2, 1])
+                gv: R.Tensor((1, 4, 3, 2), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Permute(), input_info, {}, expected1)
+
+
+def test_reshape():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"x": ([1, 2, 3, 4], "float32")}
+
+    class Reshape(Module):
+        def forward(self, x):
+            return x.reshape(2, 12)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(x: R.Tensor((1, 2, 3, 4), dtype="float32")) -> R.Tensor((2, 12), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((2, 12), dtype="float32") = R.reshape(x, (2, 12))
+                gv: R.Tensor((2, 12), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Reshape(), input_info, {}, expected1)
+
+
+def test_transpose():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"x": ([1, 2, 3, 4], "float32")}
+
+    class Transpose(Module):
+        def forward(self, x):
+            return x.transpose(1, 3)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            x: R.Tensor((1, 2, 3, 4), dtype="float32")
+        ) -> R.Tensor((1, 4, 3, 2), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((1, 4, 3, 2), dtype="float32") = R.permute_dims(x, axes=[0, 3, 2, 1])
+                gv: R.Tensor((1, 4, 3, 2), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(Transpose(), input_info, {}, expected1)
+
+
+def test_view():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"x": ([1, 2, 3, 4], "float32")}
+
+    class View(Module):
+        def forward(self, x):
+            return x.view(2, 12)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(x: R.Tensor((1, 2, 3, 4), dtype="float32")) -> R.Tensor((2, 12), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                lv: R.Tensor((2, 12), dtype="float32") = R.reshape(x, (2, 12))
+                gv: R.Tensor((2, 12), dtype="float32") = lv
+                R.output(gv)
+            return gv
+
+    verify_model(View(), input_info, {}, expected1)
+
+
 if __name__ == "__main__":
     tvm.testing.main()
-    test_conv()
-    test_linear()
-    test_relu()
-    test_maxpool2d()
-    test_adaptive_avgpool2d()
-    test_flatten()
-    test_batchnorm2d()
-    test_embedding()
-    test_dropout()
-    test_layernorm()
-    test_silu()
-    test_groupnorm()
-    test_softmax()
-    test_binary()
-    test_size()
-    test_unsqueeze()
-    test_getitem()
-    test_unary()
