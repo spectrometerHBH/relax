@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name, inconsistent-return-statements, unidiomatic-typecheck
 """PyTorch FX frontend of Relax."""
 
 from tvm import relax
@@ -134,6 +134,7 @@ class TorchFXTranslator:
                 strides=module.stride,
                 padding=module.padding,
                 dilation=module.dilation,
+                groups=module.groups,
                 data_layout="NCHW",
                 kernel_layout="OIHW",
                 out_dtype="float32",
@@ -502,7 +503,7 @@ class TorchFXTranslator:
 
     def _transpose(self, node: fx.node.Node) -> relax.Var:
         args = self.retrive_args(node)
-        full_idx = [i for i in range(len(args[0].struct_info.shape))]
+        full_idx = list(range(len(args[0].struct_info.shape)))
         full_idx[args[1]], full_idx[args[2]] = full_idx[args[2]], full_idx[args[1]]
         return self.block_builder.emit(relax.op.permute_dims(args[0], full_idx))
 
@@ -655,6 +656,21 @@ class TorchFXTranslator:
         return attr_itr
 
     def from_pytorch(self, model, input_info):
+        """Convert a PyTorch model to a Relax program.
+
+        Parameters
+        ----------
+        model : torch.nn.Module
+            The PyTorch model to convert.
+
+        input_info : Dict[str, Tuple[Tuple[int], str]]
+            A dictionary mapping input names to their shapes and data types.
+
+        Returns
+        -------
+        module : tvm.ir.module.IRModule
+            The converted Relax program.
+        """
         self.named_modules = dict(model.named_modules())
 
         # fx.symbolic_trace(model).graph.print_tabular()
@@ -670,7 +686,7 @@ class TorchFXTranslator:
         for _, param in model.named_parameters():
             shape = param.data.shape
             dtype = self._convert_data_type(str(param.data.dtype))
-            if dtype == "float32" or dtype == "float16":
+            if dtype in ("float32", "float16"):
                 self.params[param] = relax.const(
                     param.data.cpu().numpy(), relax.TensorStructInfo(shape, dtype)
                 )
