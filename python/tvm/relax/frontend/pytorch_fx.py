@@ -20,9 +20,9 @@
 from typing import Dict
 
 from tvm import relax
-import torch
+import torch  # type: ignore
 from torch import nn, fx
-import numpy as np
+import numpy as np  # type: ignore
 
 
 class TorchFXTranslator:
