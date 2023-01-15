@@ -970,6 +970,29 @@ def test_unsqueeze():
     verify_model(Unsqueeze2(), input_info, {}, expected2)
 
 
+def test_getattr():
+    torch.set_grad_enabled(False)
+    torch.random.manual_seed(0)
+
+    input_info = {"input_1": ([1, 3, 10, 10], "float32")}
+
+    class GetAttr1(Module):
+        def forward(self, input):
+            return input.shape
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(input_1: R.Tensor((1, 3, 10, 10), dtype="float32")) -> R.Shape([1, 3, 10, 10]):
+            # block 0
+            with R.dataflow():
+                gv: R.Shape([1, 3, 10, 10]) = (1, 3, 10, 10)
+                R.output(gv)
+            return gv
+
+    verify_model(GetAttr1(), input_info, {}, expected1)
+
+
 def test_getitem():
     torch.set_grad_enabled(False)
     torch.random.manual_seed(0)
@@ -1431,4 +1454,5 @@ def test_view():
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_getattr()

@@ -295,8 +295,11 @@ class TorchFXTranslator:
         return self.block_builder.emit(relax.op.astype(args[0], args[1]))
 
     def _getattr(self, node: fx.node.Node) -> relax.Var:
-        if isinstance(self.env[node.args[0]], relax.Var) and node.args[1] == "dtype":
-            return self.env[node.args[0]].struct_info.dtype
+        if isinstance(self.env[node.args[0]], relax.Expr):
+            if node.args[1] == "dtype":
+                return self.env[node.args[0]].struct_info.dtype
+            elif node.args[1] == "shape":
+                return self.env[node.args[0]].struct_info.shape
         return getattr(self.env[node.args[0]], node.args[1])
 
     def _getitem(self, node: fx.node.Node) -> relax.Var:
