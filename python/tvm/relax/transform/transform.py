@@ -533,6 +533,19 @@ def LiftTransformParams() -> tvm.ir.transform.Pass:
     return _ffi_api.LiftTransformParams()  # type: ignore
 
 
+def DeadCodeElimination() -> tvm.ir.transform.Pass:
+    """Remove dead code in the program.
+    Currently it removes:
+        1. Unused local VarBindings in a DataflowBlock.
+
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass.
+    """
+    return _ffi_api.DeadCodeElimination()  # type: ignore
+
+
 def _wrap_class_function_pass(pass_cls, pass_info):
     """Wrap a python class as function pass."""
 

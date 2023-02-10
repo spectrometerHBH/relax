@@ -286,6 +286,14 @@ TVM_DLL Pass Gradient(String func_name, Optional<Array<Var>> require_grads = Nul
  */
 TVM_DLL Pass SplitCallTIRByPattern(Array<TIRPattern> patterns, FCodegen fcodegen);
 
+/*!
+ * \brief Dead code elimination.
+ * Currently it removes:
+ *   1. Unused local VarBindings in a DataflowBlock.
+ * \return The Pass.
+ */
+TVM_DLL Pass DeadCodeElimination();
+
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm
