@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Test code for layer_norm."""
+"""Test code for group_norm."""
 import numpy as np
 import pytest
 import tvm
@@ -26,36 +26,40 @@ import tvm.topi.testing
 import tvm.testing
 
 
-_layer_norm_schedule = {
+_group_norm_schedule = {
     "generic": topi.generic.schedule_injective,
 }
 
 
 # only test on llvm because schedule is missing
 @tvm.testing.parametrize_targets("llvm")
-@pytest.mark.parametrize("shape,axis", [([4, 16], (1,)), ([4, 16, 16], (1, 2))])
+@pytest.mark.parametrize("shape, axis", [([2, 4, 16], (2,)), ([2, 4, 4, 16], (2, 3))])
 @pytest.mark.parametrize("dtype", ["float32", "float16"])
-def test_layer_norm(target, dev, shape, axis, dtype, episilon=1e-5, rtol=5e-4, atol=5e-4):
+def test_group_norm(target, dev, shape, axis, dtype, epsilon=1e-5, rtol=1e-5, atol=1e-5):
     data = te.placeholder(shape, dtype=dtype, name="data")
-    scale_shape = [shape[dim] for dim in axis]
-    gamma = te.placeholder(scale_shape, dtype=dtype, name="gamma")
-    beta = te.placeholder(scale_shape, dtype=dtype, name="beta")
-    B = topi.nn.layer_norm(data, gamma, beta, axis, episilon)
+    num_groups = 2
+    channel_axis = 1
+    gamma = te.placeholder((shape[channel_axis],), dtype=dtype, name="gamma")
+    beta = te.placeholder((shape[channel_axis],), dtype=dtype, name="beta")
+    B = topi.nn.group_norm(data, gamma, beta, num_groups, channel_axis, axis, epsilon)
 
+    np.random.seed(0)
     data_np = np.random.uniform(size=shape).astype(dtype)
-    gamma_np = np.random.uniform(size=scale_shape).astype(dtype)
-    beta_np = np.random.uniform(size=scale_shape).astype(dtype)
-    b_np = tvm.topi.testing.layer_norm_python(data_np, gamma_np, beta_np, axis, episilon)
+    gamma_np = np.random.uniform(size=(shape[channel_axis],)).astype(dtype)
+    beta_np = np.random.uniform(size=(shape[channel_axis],)).astype(dtype)
+    b_np = tvm.topi.testing.group_norm_python(
+        data_np, gamma_np, beta_np, num_groups, channel_axis, axis, epsilon
+    )
 
     with tvm.target.Target(target):
-        s_func = tvm.topi.testing.dispatch(target, _layer_norm_schedule)
+        s_func = tvm.topi.testing.dispatch(target, _group_norm_schedule)
         s = s_func([B])
-        print(tvm.lower(s, [data, gamma, beta, B], simple_mode=True))
     data_tvm = tvm.nd.array(data_np, dev)
     gamma_tvm = tvm.nd.array(gamma_np, dev)
     beta_tvm = tvm.nd.array(beta_np, dev)
     b_tvm = tvm.nd.array(np.zeros(get_const_tuple(B.shape), dtype=dtype), dev)
     f = tvm.build(s, [data, gamma, beta, B], target)
+    print(tvm.lower(s, [data, gamma, beta, B], simple_mode=True))
     f(data_tvm, gamma_tvm, beta_tvm, b_tvm)
     tvm.testing.assert_allclose(b_tvm.asnumpy(), b_np, rtol=rtol, atol=atol)
 

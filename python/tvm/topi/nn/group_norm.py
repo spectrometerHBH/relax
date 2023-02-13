@@ -14,43 +14,39 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name, line-too-long, unused-variable, too-many-locals
-"""Layer normalization in python"""
-import numpy as np
+"""Layer normalization operator."""
+from .. import cpp
 
 
-def layer_norm_python(data, gamma, beta, axis, epsilon=1e-5):
-    """Layer normalization operator in Python.
+def group_norm(data, gamma, beta, num_groups, channel_axis, axes, epsilon=1e-5):
+    """Group normalization operator.
 
     Parameters
     ----------
-    data : numpy.ndarray
+    data : tvm.te.Tensor
         N-D with shape (d_0, d_1, ..., d_{N-1})
 
-    gamma: numpy.ndarray
-        K-D with shape (r_0, r_1, ..., r_{K-1}) where K == len(axis) and d_{axis_k} == r_k
+    gamma: tvm.te.Tensor
+        1-D with shape (r_0) where r_0 == d_{channel_axis}
 
-    beta: numpy.ndarray
-        Optional, K-D with shape (r_0, r_1, ..., r_{K-1}) where K == len(axis) and d_{axis_k} == r_k
+    beta: tvm.te.Tensor
+        Optional, 1-D with shape (r_0) where r_0 == d_{channel_axis}
 
-    axis : int or tuple of ints
-        Axis over the normalization applied
+    num_groups : int
+        The number of groups
+
+    channel_axis : int
+        The channel axis
+
+    axes : list of int
+        Axis over the normalization applied, excluding the channel axis
 
     epsilon : float
         The epsilon value to avoid division by zero.
 
     Returns
     -------
-    result : np.ndarray
+    result : tvm.te.Tensor
         N-D with shape (d_0, d_1, ..., d_{N-1})
     """
-    old_dtype = data.dtype
-    data = data.astype("float32")
-    mean = np.mean(data, axis, keepdims=True)
-    var = np.var(data, axis, keepdims=True)
-    result = (data - mean) / np.sqrt(var + epsilon)
-    result = result.astype(old_dtype)
-    result *= gamma
-    if beta is not None:
-        result += beta
-    return result
+    return cpp.nn.group_norm(data, gamma, beta, num_groups, channel_axis, axes, epsilon)

@@ -241,6 +241,7 @@ def _linux_compile(output, objects, options, compile_cmd, compile_shared=False):
         cmd += ["-std=c++17"]
         cmd += ["-Xcompiler=-fPIC"]
         cmd += ["-Xcompiler=-fno-strict-aliasing"]
+        cmd += ["-t 24"]
     cmd += ["-o", output]
     if isinstance(objects, str):
         cmd += [objects]
