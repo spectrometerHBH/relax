@@ -279,6 +279,14 @@ TVM_DLL Pass RunCodegen(Optional<Map<String, Map<String, ObjectRef>>> target_opt
  * \return The Pass.
  */
 TVM_DLL Pass SimplifyNormInference();
+
+/*!
+ * \brief Automatic layout conversion pass.
+ * \param desired_layouts The desired layouts for some operators.
+ * \return The Pass.
+ */
+TVM_DLL Pass ConvertLayout(Map<String, Array<String>> desired_layouts);
+
 }  // namespace transform
 }  // namespace relax
 }  // namespace tvm

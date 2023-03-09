@@ -325,7 +325,6 @@ class ExprEvaluator:
         lower = self._eval_expr(lower) if lower is not None else None
         upper = self._eval_expr(upper) if upper is not None else None
         step = self._eval_expr(step) if step is not None else None
-
         return slice(lower, upper, step)
 
     def _eval_expr(self, v: Any) -> Any:
