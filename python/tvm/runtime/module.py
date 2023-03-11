@@ -539,11 +539,12 @@ class Module(object):
         # Thus, it would not recognize the following include paths as options
         # which are there assuming a c compiler is the fcompile.
         if has_c_module and not file_name.endswith(".tar"):
+            use_nvcc = kwargs.get("cc", "") == "nvcc"
             options = []
             if "options" in kwargs:
                 opts = kwargs["options"]
                 options = opts if isinstance(opts, (list, tuple)) else [opts]
-            opts = options + ["-I" + path for path in find_include_path()]
+            opts = options + ["-I" + path for path in find_include_path(use_nvcc=use_nvcc)]
             kwargs.update({"options": opts})
 
         return fcompile(file_name, files, **kwargs)

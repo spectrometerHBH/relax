@@ -701,6 +701,7 @@ class SplitMutator : public ExprMutator {
   Expr VisitExpr_(const CallNode* op) final {
     Call call = Downcast<Call>(ExprMutator::VisitExpr_(op));
     static const Op& call_tir_op_ = Op::Get("relax.call_tir");
+    static const Op& call_dps_packed_ = Op::Get("relax.call_dps_packed");
     if (call->op.same_as(call_tir_op_)) {
       // the first argument is the function to be called
       const auto* gv_ptr = call->args[0].as<GlobalVarNode>();
@@ -721,6 +722,7 @@ class SplitMutator : public ExprMutator {
         builder_->UpdateFunction(gv, lib_func);
         // emit the call to the library kernel
         ObjectPtr<CallNode> new_call = make_object<CallNode>(*call.operator->());
+        new_call->op = this->call_dps_packed_;
         new_call->args = {lib_func, call->args[1]};
         return Call(new_call);
       }
@@ -739,7 +741,7 @@ class SplitMutator : public ExprMutator {
       builder_->UpdateFunction(gv, lib_func);
       tir::Buffer intermediate_buffer = func1->buffer_map.at(func1->params.back());
       DataType dtype = intermediate_buffer->dtype;
-      Call call1(call_tir_op_, {lib_func, Tuple(args1)}, call->attrs,
+      Call call1(call_dps_packed_, {lib_func, Tuple(args1)}, call->attrs,
                  {TensorStructInfo(ShapeExpr(intermediate_buffer->shape), dtype)});
       Var call_var1 = builder_->Emit(call1);
       // emit the second call to the rest of the function
@@ -756,6 +758,7 @@ class SplitMutator : public ExprMutator {
     return call;
   }
 
+  const Op& call_dps_packed_ = Op::Get("relax.call_dps_packed");
   tvm::IRModule mod_;
   Array<TIRPattern> patterns_;
   FCodegen fcodegen_;
